@@ -1,0 +1,4 @@
+# Exclude examples and tests from the PyPI package
+exclude examples/*
+exclude tests/*
+

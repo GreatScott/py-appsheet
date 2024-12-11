@@ -1,0 +1,46 @@
+# General Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.env/
+venv/
+
+# Environment Variables
+.env
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+
+# PyPI upload artifacts
+*.egg-info/
+*.eggs
+MANIFEST
+
+
+# Logs and Debugging
+*.log
+
+# IDEs and Editors
+.idea/
+.vscode/
+
+# Testing Cache
+.tox/
+htmlcov/
+
