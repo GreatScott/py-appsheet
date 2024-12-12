@@ -1,6 +1,9 @@
 # py-appsheet
 A no-frills Python library for interacting with Google AppSheet
 
+## Installation
+py-appsheet is available on [PyPI](https://pypi.org/project/py-appsheet/) so can be installed via `pip install py-appsheet` in the terminal.
+
 ## Background and Setup
 * To work with this you need to create an AppSheet App first (i.e. not just an AppSheet Database). 
 * To enable working with the API, you must go into the app's settings (gear icon) and then the integrations sub-item on the left. There you will find the App ID (make sure it's switched to enabled) and can create an Application Access key.
@@ -9,7 +12,16 @@ A no-frills Python library for interacting with Google AppSheet
 	* Make sure that you have your key column set correctly and that your schema is up-to-date (can be regenerated in the data view for the application)
 	* Leverage Appsheet's Log Analyzer to get in-depth error messages. Can be access under your Appsheet App -> icon that looks like a pulse -> "Monitor" submenu -> "Audit History" -> "Launch log analyzer"
 
+To initialize in your code, simply import the library and instantiate the class:
 
+```
+from py_appsheet.client import AppSheetClient
+
+APPSHEET_APP_ID = <your app ID>
+APPSHEET_API_KEY = <your app's API key>
+
+client = AppSheetClient(app_id=APPSHEET_APP_ID, api_key=APPSHEET_API_KEY)
+```
 
 ## Available Methods
 
