@@ -54,7 +54,7 @@ rows_to_add = [
 
 
 # Add rows to the AppSheet table
-response = client.add_item("Inventory Table", rows_to_add)
+response = client.add_items("Inventory Table", rows_to_add)
 
 # Process the response
 print("Response from AppSheet API:", response)
