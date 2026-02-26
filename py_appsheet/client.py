@@ -1,12 +1,11 @@
 #
-import os
 import requests
 
 '''
 Some notes:
 - API Reference: https://support.google.com/appsheet/answer/10105398?sjid=1506075158107162628-NC
 - Available actions: Add, Delete, Edit (requires lookup by table key), Find
-- Table-names are passed in through URL, so if there are spaces in the name, %20 (percent-encoding) 
+- Table-names are passed in through URL, so if there are spaces in the name, %20 (percent-encoding)
   needs to be used
 - Column-names are strings in the JSON payload and should not use %20 for representing spaces.
 '''
@@ -29,60 +28,49 @@ class AppSheetClient:
             raise Exception(f"Request failed with status code {response.status_code}")
         return response.json()
 
+    def find_items(self, table_name, item=None, target_column=None, selector=None):
         """
-        Find rows containing a specific item in the specified table.
-        
-        This method queries a table and retrieves rows containing the specified item.
-        If the item corresponds to a unique key in the table, the returned row will
-        contain all related data. For example, in an inventory table with columns like
-        "serial number" (unique) and "registered", you might:
-        
-        - Query a specific serial number to find whether it is registered.
-        - Query `True` to get all rows where "registered" is `True`.
-        
+        Find rows in the specified AppSheet table.
+
+        Supports two filtering modes:
+        - Server-side: pass a `selector` string (AppSheet expression) for efficient API-level filtering.
+        - Local: pass `item` (and optionally `target_column`) to filter the full table client-side.
+        Both can be combined: selector narrows results server-side, then item/target_column refines locally.
+
         Args:
             table_name (str): The name of the table to search.
-            item (Any): The value to search for in the table.
+                Assumes only spaces as special characters (i.e. not &, ?, #)
+            item (Any, optional): The value to search for. If None, all rows (or selector results) are returned.
+            target_column (str, optional): The specific column to match `item` against.
+                If None and item is set, all column values are searched.
+            selector (str, optional): An AppSheet selector expression for server-side filtering,
+                e.g. "Filter(MyTable, [Status] = 'Active')". Use utils.build_selector() to construct one.
 
         Returns:
-            list: A list of rows (dicts) containing the matching items. Returns an
-                  empty list if no matching rows are found.
+            list: A list of rows (dicts) matching the criteria. Returns an empty list if no matches.
         """
+        properties = {"Locale": "en-US", "Timezone": "UTC"}
+        if selector:
+            properties["Selector"] = selector
 
-    def find_items(self, table_name, item, target_column=None):
-        """
-        Find rows containing a specific item in the specified table.
-        Optionally filter based on a specific column.
-        Args:
-            table_name (str): The name of the table to search. 
-            Assumes only spaces as special characters (i.e. not &, ?, #)
-            item (Any): The value to search for in the table.
-            target_column (str, optional): The specific column to search in. If None,
-                                        all columns are searched.
-
-        Returns:
-            list: A list of rows (dicts) containing the matching items. Returns an
-                  empty list if no matching rows are found.
-        """
         payload = {
             "Action": "Find",
-            "Properties": {"Locale": "en-US", "Timezone": "UTC"},
+            "Properties": properties,
             "Rows": [],
         }
-        # Send the request
+
         response_data = self._make_request(table_name.replace(' ', '%20'), "Find", payload)
 
-        # Error handling: Validate response format
         if not isinstance(response_data, list):
             raise ValueError("Unexpected response format: Expected a list of rows.")
 
-        # Process response: Filter rows locally for matches
-        if target_column:
-            matching_rows = [row for row in response_data if row.get(target_column) == item]
-        else:
-            matching_rows = [row for row in response_data if item in row.values()]
-        
-        return matching_rows
+        if item is not None:
+            if target_column:
+                response_data = [row for row in response_data if row.get(target_column) == item]
+            else:
+                response_data = [row for row in response_data if item in row.values()]
+
+        return response_data
 
     def add_items(self, table_name, rows):
         """
@@ -90,14 +78,14 @@ class AppSheetClient:
 
         Args:
             table_name (str): The name of the table to which rows will be added.
-            Assumes only spaces as special characters (i.e. not &, ?, #)
+                Assumes only spaces as special characters (i.e. not &, ?, #)
             rows (list[dict]): A list of dictionaries where each dictionary represents a row to be added.
 
         Returns:
             dict: The response from the AppSheet API.
 
         Raises:
-            ValueError: If the response from the API is not in JSON format or contains an error.
+            ValueError: If the response from the API is not in the expected format.
         """
         payload = {
             "Action": "Add",
@@ -108,14 +96,11 @@ class AppSheetClient:
             "Rows": rows
         }
 
-        # Encode table name for URL and send the request
         response_data = self._make_request(table_name.replace(' ', '%20'), "Add", payload)
-    
-        # Validate the response
+
         if not isinstance(response_data, dict):
             raise ValueError("Unexpected response format: Expected a JSON dictionary.")
-    
-        # Return the response
+
         return response_data
 
     def edit_item(self, table_name, key_column, row_data):
@@ -124,8 +109,10 @@ class AppSheetClient:
 
         Args:
             table_name (str): The name of the table where the row exists.
-            Assumes only spaces as special characters (i.e. not &, ?, #)
+                Assumes only spaces as special characters (i.e. not &, ?, #)
             key_column (str): The name of the key column in the table.
+                For composite-key tables, pass "_ComputedKey" (or the configured name)
+                and include it in row_data using utils.build_composite_key().
             row_data (dict): A dictionary containing the data to update. The key
                              column and its value must be included.
 
@@ -150,51 +137,59 @@ class AppSheetClient:
             "Rows": [row_data]
         }
 
-        # Encode table name for URL and send the request
         response_data = self._make_request(table_name.replace(' ', '%20'), "Edit", payload)
 
-        # Validate the response
         if not isinstance(response_data, dict):
             raise ValueError("Unexpected response format: Expected a JSON dictionary.")
 
         return response_data
 
-    def delete_row(self, table_name, key_column, key_value):
+    def delete_item(self, table_name, key_column, key_value=None):
         """
         Delete a row in the specified AppSheet table.
 
+        For single-key tables, pass the key column name and its value:
+            delete_item("MyTable", "ID", "abc123")
+
+        For composite-key tables, pass a dict of all key column values as key_column
+        and omit key_value:
+            delete_item("MyTable", {"keycol1": "v1", "keycol2": "v2"})
+
         Args:
             table_name (str): The name of the table from which to delete the row.
-            Assumes only spaces as special characters (i.e. not &, ?, #)
-            key_column (str): The name of the key column in the table.
-            key_value (Any): The value of the key column for the row to be deleted.
+                Assumes only spaces as special characters (i.e. not &, ?, #)
+            key_column (str | dict): The key column name (single key), or a dict mapping
+                all key column names to their values (composite key).
+            key_value (Any, optional): The value of the key column. Required when
+                key_column is a string; omit when key_column is a dict.
 
         Returns:
             dict: The response from the AppSheet API.
 
         Raises:
-            ValueError: If the API response is not in JSON format or contains an error.
+            ValueError: If the API response is not in the expected format.
         """
+        if isinstance(key_column, dict):
+            row = key_column
+        else:
+            row = {key_column: key_value}
+
         payload = {
             "Action": "Delete",
             "Properties": {
                 "Locale": "en-US",
                 "Timezone": "UTC"
             },
-            "Rows": [
-                {key_column: key_value}
-            ]
+            "Rows": [row]
         }
 
-        # Encode table name for URL and send the request
         response_data = self._make_request(table_name.replace(' ', '%20'), "Delete", payload)
 
-        # Validate the response
         if not isinstance(response_data, dict):
             raise ValueError("Unexpected response format: Expected a JSON dictionary.")
 
         return response_data
 
-
-
-
+    def delete_row(self, table_name, key_column, key_value):
+        """Backwards-compatible alias for delete_item()."""
+        return self.delete_item(table_name, key_column, key_value)

@@ -1,112 +1,221 @@
 # py-appsheet
-A no-frills Python library for interacting with Google AppSheet
+A no-frills Python library for interacting with the Google AppSheet API.
 
 ## Installation
-py-appsheet is available on [PyPI](https://pypi.org/project/py-appsheet/) so can be installed via `pip install py-appsheet` in the terminal.
-
-## Background and Setup
-* To work with this you need to create an AppSheet App first (i.e. not just an AppSheet Database). 
-* To enable working with the API, you must go into the app's settings (gear icon) and then the integrations sub-item on the left. There you will find the App ID (make sure it's switched to enabled) and can create an Application Access key.
-* Be sure to not write these explicitly into your code. Instead it's better to store these in a .env file (make sure .gitignore lists the .env if working with a repo) and use `os.environ.get()` to pull in the secret values to work with them.
-* Some basic troubleshooting tips:
-	* Make sure that you have your key column set correctly and that your schema is up-to-date (can be regenerated in the data view for the application)
-	* Leverage Appsheet's Log Analyzer to get in-depth error messages. Can be access under your Appsheet App -> icon that looks like a pulse -> "Monitor" submenu -> "Audit History" -> "Launch log analyzer"
-
-To initialize in your code, simply import the library and instantiate the class:
-
 ```
-from py_appsheet.client import AppSheetClient
-
-APPSHEET_APP_ID = <your app ID>
-APPSHEET_API_KEY = <your app's API key>
-
-client = AppSheetClient(app_id=APPSHEET_APP_ID, api_key=APPSHEET_API_KEY)
+pip install py-appsheet
 ```
 
-## Available Methods
+## Setup
 
-### Find Items
-1. Search for a Specific Value in Any Column
-`result = client.find_item("Table Name", "ABC123")
-`
-2. Search for a Specific Vaue in a Specific Column
-`result = client.find_item("Table Name", "ABC123", target_column="column name")`
+To use the AppSheet API you need an AppSheet **App** (not just an AppSheet Database).
 
-### Add Items (New Rows)
+1. Open your app and go to **Settings** (gear icon) → **Integrations**
+2. Enable the API and note your **App ID**
+3. Generate an **Application Access Key**
 
+Store these as environment variables — never hardcode them:
+
+```python
+import os
+from py_appsheet import AppSheetClient
+
+client = AppSheetClient(
+    app_id=os.environ.get("APPSHEET_APP_ID"),
+    api_key=os.environ.get("APPSHEET_API_KEY"),
+)
 ```
-rows_to_add = [
-    {
-        "Generation Date": "1700000000",
-        "UserID": "someone@someone.com",
-        "Serial Number Hex": "ABC123",
-        "SKU": "SKU123",
-        "Batch": "Batch01",
-    },
-    {
-        "Generation Date": "1700000001",
-        "UserID": "john@doe.com",
-        "Serial Number Hex": "DEF456",
-        "SKU": "SKU456",
-        "Batch": "Batch02",
-    }
+
+## Methods
+
+### find_items — Read
+
+Search a table for rows matching a value. Supports both local filtering (simple) and
+server-side filtering via an AppSheet selector expression (efficient for large tables).
+
+```python
+# Return all rows in a table
+rows = client.find_items("My Table")
+
+# Filter by a specific column (local)
+rows = client.find_items("My Table", "ABC123", target_column="Serial Number")
+
+# Filter across all columns (local)
+rows = client.find_items("My Table", "ABC123")
+
+# Server-side filtering using an AppSheet selector expression (recommended for large tables)
+from py_appsheet import build_selector
+
+selector = build_selector("My Table", "Status", "In Progress")
+rows = client.find_items("My Table", selector=selector)
+
+# Combine: selector narrows server-side, then local filter refines further
+rows = client.find_items("My Table", "Jane", target_column="Assignee", selector=selector)
+```
+
+### add_items — Create
+
+Add one or more rows to a table.
+
+```python
+rows = [
+    {"Title": "Task A", "Assignee": "Alice", "Status": "Not Started"},
+    {"Title": "Task B", "Assignee": "Bob",   "Status": "In Progress"},
 ]
 
-
-# Add rows to the AppSheet table
-response = client.add_items("Inventory Table", rows_to_add)
-
-# Process the response
-print("Response from AppSheet API:", response)
-
-
+response = client.add_items("My Table", rows)
 ```
 
-### Edit Item
+### edit_item — Update
 
-Note: when updating an entry, the dictionary's first entry in the row data should be the designated key column (as defined in the AppSheet app settings for that table)
+Update an existing row. The key column must be included in `row_data`.
 
-```
-# Example usage of edit_item
-serial_number = "ABC123"
-sku = "SKU456"
-
-row_data = {
-    "Serial Number Hex": serial_number,  # Key column for the table
-    "Bar Code": f"Inventory_Images/{serial_number}_serial_barcode.svg",
-    "QR Code": f"Inventory_Images/{serial_number}_serial_qr.svg",
-    "SKU Bar Code": f"Inventory_Images/{sku}_sku_barcode.svg"
-}
-
-response = client.edit_item("Inventory Table", "Serial Number Hex", row_data)
-
-if response.get("status") == "OK":
-    print("Row updated successfully with image paths.")
-else:
-    print(f"Failed to update row. API response: {response}")
-
+```python
+response = client.edit_item(
+    "My Table",
+    "Serial Number",               # key column name
+    {
+        "Serial Number": "ABC123", # key column value (identifies the row)
+        "Status": "Complete",      # fields to update
+        "Notes": "Shipped",
+    }
+)
 ```
 
-### Delete Row by Key
+### delete_item — Delete
 
+Delete a row by its key.
+
+```python
+# Single key column
+response = client.delete_item("My Table", "Serial Number", "ABC123")
+
+# Composite key: pass a dict of all key column values (see Composite Keys below)
+response = client.delete_item("My Table", {"keycol1": "foo", "keycol2": "bar"})
 ```
-# Example: Delete a row by its key
-# "Serial Number Hex" is key col name
 
-response = client.delete_row("Inventory Table", "Serial Number Hex", "ABC123") 
+`delete_row()` is available as a backwards-compatible alias for `delete_item()`.
 
+---
+
+## Composite Key Tables
+
+When two or more columns are marked as keys in AppSheet, the app automatically creates
+a computed key column (named `_ComputedKey` by default) whose value is the key columns
+concatenated with `": "` as the separator.
+
+Use `build_composite_key()` to construct the expected `_ComputedKey` value for filtering:
+
+```python
+from py_appsheet import build_composite_key
+
+key = build_composite_key("foo", "bar")  # -> "foo: bar"
+
+# Find a row by its computed key
+rows = client.find_items("My Table", key, target_column="_ComputedKey")
 ```
 
+For **edit** and **delete**, include all key columns directly in the row data — AppSheet
+does not accept `_ComputedKey` in write payloads:
 
-## Known Limitations and Important Notes
-*(Contributions Welcome!)*
+```python
+# Edit: include all key columns + fields to update in row_data
+client.edit_item(
+    "My Table",
+    "keycol1",                                           # any one key column goes first
+    {"keycol1": "foo", "keycol2": "bar", "val": "new"}, # all key cols + updated fields
+)
 
-* Querying for specific rows that contain an item of interest currently pulls all rows and filters locally.
-* Finding items currently pulls all rows and returns it in whatever, but the API does appear to have support for filtering and ordering. [See here](https://support.google.com/appsheet/answer/10105770?hl=en&ref_topic=10105767&sjid=1506075158107162628-NC)
-* Appsheet table names, which are used in URL-encoding, are assumed to not contain any special characters other than spaces. I.e. you can supply a table name like `"my table"` and the library will convert this to `"my%20table"` as needed under the hood, but does not handle other special characters that may mess with URL-encoding. 
+# Delete: pass a dict of all key column values
+client.delete_item("My Table", {"keycol1": "foo", "keycol2": "bar"})
+```
 
-## Additional Credits
-Credit where credit is due. ChatGPT was leveraged extensively to put this together quickly. 
+---
+
+## Utilities
+
+### build_selector
+
+Constructs an AppSheet `Filter()` expression for use with `find_items()`.
+
+```python
+from py_appsheet import build_selector
+
+build_selector("Tasks", "Status", "In Progress")
+# -> "Filter(Tasks, [Status] = 'In Progress')"
+
+build_selector("Tasks", "Priority", "3", operator=">=")
+# -> "Filter(Tasks, [Priority] >= '3')"
+```
+
+### build_composite_key
+
+Constructs a composite key string matching AppSheet's default `_ComputedKey` formula.
+
+```python
+from py_appsheet import build_composite_key
+
+build_composite_key("foo", "bar")           # -> "foo: bar"
+build_composite_key("a", "b", "c")          # -> "a: b: c"
+build_composite_key("x", "y", separator="|") # -> "x|y"
+```
+
+---
+
+## Troubleshooting
+
+- **Schema out of date:** If you've added or changed columns in AppSheet, regenerate the
+  schema in the app's Data view.
+- **Key column errors:** Confirm your key column is marked correctly in AppSheet's column
+  settings for that table.
+- **Detailed error logs:** AppSheet → pulse icon → Monitor → Audit History → Launch Log Analyzer.
+- **Table name encoding:** Table names may contain spaces (converted to `%20` automatically)
+  but should not contain other URL special characters (`&`, `?`, `#`).
+
+---
+
+## Running Tests
+
+**Unit tests** (no credentials needed):
+```
+pytest
+```
+
+**Integration tests** (requires a real AppSheet project):
+```
+pytest -m integration
+```
+
+Integration tests run against two specific tables. To set them up, create an AppSheet app
+backed by a spreadsheet with the following tables:
+
+**`example_table`**
+
+| Column | Type | Key? |
+|---|---|---|
+| Title Example | Text | ✅ |
+| Assignee | Text | |
+| Status | Enum (`Not Started`, `In Progress`, `Complete`) | |
+| Date | Date | |
+| Another Column | Text | |
+
+**`dual_key_table`**
+
+| Column | Type | Key? |
+|---|---|---|
+| keycol1 | Text | ✅ |
+| keycol2 | Text | ✅ |
+| val | Text | |
+
+> `_ComputedKey` is generated automatically by AppSheet when multiple key columns are present.
+
+Add your App ID and access key to a `.env` file in the project root:
+```
+APP_ID=your-app-id
+ACCESS_KEY=your-access-key
+```
+
+---
 
 ## Contributing
-Contributions are welcome. Please submit pull requests to the dev branch.
+Contributions are welcome. Please submit pull requests to the `dev` branch.
