@@ -43,4 +43,6 @@ MANIFEST
 # Testing Cache
 .tox/
 htmlcov/
+.pytest_cache/
 
+appsheet_backup_export_schema_spec_v3.md
