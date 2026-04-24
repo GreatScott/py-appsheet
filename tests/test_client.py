@@ -8,7 +8,7 @@ class TestAppSheetClient(unittest.TestCase):
     def setUp(self):
         self.client = AppSheetClient(app_id="test_app_id", api_key="test_api_key")
 
-    def test__init__locale_tz_fallback(self):
+    def test__init__locale_tz_defaults(self):
         client = AppSheetClient(app_id="test_app_id", api_key="test_api_key")
         with patch.object(client, '_make_request', return_value=[]) as mock_req:
             client.find_items("MyTable")
