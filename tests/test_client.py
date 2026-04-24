@@ -19,7 +19,7 @@ class TestAppSheetClient(unittest.TestCase):
     def test__init__locale_tz_custom(self):
         client = AppSheetClient(app_id="test_app_id", api_key="test_api_key", locale="de-DE", timezone="WET")
         with patch.object(client, '_make_request', return_value=[]) as mock_req:
-             client.find_items("MyTable")
+            client.find_items("MyTable")
         payload = mock_req.call_args[0][2]
         self.assertEqual(payload["Properties"]["Locale"], "de-DE")
         self.assertEqual(payload["Properties"]["Timezone"], "WET")
