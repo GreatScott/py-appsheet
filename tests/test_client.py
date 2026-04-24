@@ -8,6 +8,22 @@ class TestAppSheetClient(unittest.TestCase):
     def setUp(self):
         self.client = AppSheetClient(app_id="test_app_id", api_key="test_api_key")
 
+    def test__init__locale_tz_defaults(self):
+        client = AppSheetClient(app_id="test_app_id", api_key="test_api_key")
+        with patch.object(client, '_make_request', return_value=[]) as mock_req:
+            client.find_items("MyTable")
+        payload = mock_req.call_args[0][2]
+        self.assertEqual(payload["Properties"]["Locale"], "en-US")
+        self.assertEqual(payload["Properties"]["Timezone"], "UTC")
+
+    def test__init__locale_tz_custom(self):
+        client = AppSheetClient(app_id="test_app_id", api_key="test_api_key", locale="de-DE", timezone="WET")
+        with patch.object(client, '_make_request', return_value=[]) as mock_req:
+            client.find_items("MyTable")
+        payload = mock_req.call_args[0][2]
+        self.assertEqual(payload["Properties"]["Locale"], "de-DE")
+        self.assertEqual(payload["Properties"]["Timezone"], "WET")
+
     # --- find_items ---
 
     def test_find_items_found(self):
@@ -87,9 +103,12 @@ class TestAppSheetClient(unittest.TestCase):
     def test_add_items(self):
         rows = [{"Serial Number Hex": "ABC123", "SKU": "SKU123"}]
         mock_response = {"status": "OK"}
-        with patch.object(self.client, '_make_request', return_value=mock_response):
+        with patch.object(self.client, '_make_request', return_value=mock_response) as mock_req:
             response = self.client.add_items("Inventory Table", rows)
+        payload = mock_req.call_args[0][2]
         self.assertEqual(response["status"], "OK")
+        self.assertEqual(payload["Properties"]["Locale"], "en-US")
+        self.assertEqual(payload["Properties"]["Timezone"], "UTC")
 
     # --- edit_item ---
 
@@ -99,9 +118,12 @@ class TestAppSheetClient(unittest.TestCase):
             "Bar Code": "some_barcode.svg",
         }
         mock_response = {"status": "OK"}
-        with patch.object(self.client, '_make_request', return_value=mock_response):
+        with patch.object(self.client, '_make_request', return_value=mock_response) as mock_req:
             response = self.client.edit_item("Inventory Table", "Serial Number Hex", row_data)
+        payload = mock_req.call_args[0][2]
         self.assertEqual(response["status"], "OK")
+        self.assertEqual(payload["Properties"]["Locale"], "en-US")
+        self.assertEqual(payload["Properties"]["Timezone"], "UTC")
 
     def test_edit_item_missing_key_column_raises(self):
         row_data = {"Bar Code": "some_barcode.svg"}
@@ -113,9 +135,12 @@ class TestAppSheetClient(unittest.TestCase):
 
     def test_delete_item(self):
         mock_response = {"status": "OK"}
-        with patch.object(self.client, '_make_request', return_value=mock_response):
+        with patch.object(self.client, '_make_request', return_value=mock_response) as mock_req:
             response = self.client.delete_item("Inventory Table", "Serial Number Hex", "ABC123")
+        payload = mock_req.call_args[0][2]
         self.assertEqual(response["status"], "OK")
+        self.assertEqual(payload["Properties"]["Locale"], "en-US")
+        self.assertEqual(payload["Properties"]["Timezone"], "UTC")
 
     def test_delete_item_composite_key(self):
         mock_response = {"status": "OK"}

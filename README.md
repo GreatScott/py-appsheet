@@ -26,6 +26,17 @@ client = AppSheetClient(
 )
 ```
 
+`locale` and `timezone` default to `"en-US"` and `"UTC"`. If AppSheet is misinterpreting date values, pass your local settings:
+
+```python
+client = AppSheetClient(
+    app_id=os.environ.get("APPSHEET_APP_ID"),
+    api_key=os.environ.get("APPSHEET_API_KEY"),
+    locale="de-DE",
+    timezone="Europe/Berlin",
+)
+```
+
 ## Methods
 
 ### find_items — Read
