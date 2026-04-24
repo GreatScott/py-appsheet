@@ -12,9 +12,19 @@ Some notes:
 
 
 class AppSheetClient:
-    def __init__(self, app_id, api_key):
+    def __init__(self, app_id, api_key, locale="en-US", timezone="UTC"):
+        """
+        Args:
+            app_id (str): Your AppSheet app ID.
+            api_key (str): Your AppSheet API key.
+            locale (str): Locale sent with every API request. Defaults to "en-US".
+                Use your local locale (e.g. "de-DE") if AppSheet is misinterpreting date values.
+            timezone (str): Timezone sent with every API request. Defaults to "UTC".
+        """
         self.app_id = app_id
         self.api_key = api_key
+        self.locale = locale
+        self.timezone = timezone
 
     def _make_request(self, table_name, action, payload):
         url = f"https://api.appsheet.com/api/v2/apps/{self.app_id}/tables/{table_name}/Action"
@@ -49,7 +59,7 @@ class AppSheetClient:
         Returns:
             list: A list of rows (dicts) matching the criteria. Returns an empty list if no matches.
         """
-        properties = {"Locale": "en-US", "Timezone": "UTC"}
+        properties = {"Locale": self.locale, "Timezone": self.timezone}
         if selector:
             properties["Selector"] = selector
 
@@ -90,8 +100,8 @@ class AppSheetClient:
         payload = {
             "Action": "Add",
             "Properties": {
-                "Locale": "en-US",
-                "Timezone": "UTC"
+                "Locale": self.locale,
+                "Timezone": self.timezone
             },
             "Rows": rows
         }
@@ -131,8 +141,8 @@ class AppSheetClient:
         payload = {
             "Action": "Edit",
             "Properties": {
-                "Locale": "en-US",
-                "Timezone": "UTC"
+                "Locale": self.locale,
+                "Timezone": self.timezone
             },
             "Rows": [row_data]
         }
@@ -177,8 +187,8 @@ class AppSheetClient:
         payload = {
             "Action": "Delete",
             "Properties": {
-                "Locale": "en-US",
-                "Timezone": "UTC"
+                "Locale": self.locale,
+                "Timezone": self.timezone
             },
             "Rows": [row]
         }
