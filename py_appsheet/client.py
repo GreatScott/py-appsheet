@@ -12,7 +12,7 @@ Some notes:
 
 
 class AppSheetClient:
-    def __init__(self, app_id, api_key, locale="en-US", timezone="UTC"):
+    def __init__(self, app_id, api_key, *, locale="en-US", timezone="UTC"):
         """
         Args:
             app_id (str): Your AppSheet app ID.
