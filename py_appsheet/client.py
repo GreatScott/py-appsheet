@@ -115,9 +115,9 @@ class AppSheetClient(ExportMixin, SchemaMixin):
 
         return response_data
 
-    def edit_item(self, table_name, key_column, row_data):
+    def update_item(self, table_name, key_column, row_data):
         """
-        Edit a row in the specified AppSheet table.
+        Update a row in the specified AppSheet table.
 
         Args:
             table_name (str): The name of the table where the row exists.
@@ -155,6 +155,10 @@ class AppSheetClient(ExportMixin, SchemaMixin):
             raise ValueError("Unexpected response format: Expected a JSON dictionary.")
 
         return response_data
+
+    def edit_item(self, table_name, key_column, row_data):
+        """Backwards-compatible alias for update_item()."""
+        return self.update_item(table_name, key_column, row_data)
 
     def delete_item(self, table_name, key_column, key_value=None):
         """

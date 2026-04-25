@@ -132,12 +132,12 @@ rows = [
 response = client.add_items("My Table", rows)
 ```
 
-### edit_item — Update
+### update_item — Update
 
 Update an existing row. The key column must be included in `row_data`.
 
 ```python
-response = client.edit_item(
+response = client.update_item(
     "My Table",
     "Serial Number",               # key column name
     {
@@ -147,6 +147,8 @@ response = client.edit_item(
     }
 )
 ```
+
+`edit_item()` is available as a backwards-compatible alias for `update_item()`.
 
 ### delete_item — Delete
 
@@ -234,12 +236,12 @@ key = build_composite_key("foo", "bar")  # -> "foo: bar"
 rows = client.find_items("My Table", key, target_column="_ComputedKey")
 ```
 
-For **edit** and **delete**, include all key columns directly in the row data — AppSheet
+For **update** and **delete**, include all key columns directly in the row data — AppSheet
 does not accept `_ComputedKey` in write payloads:
 
 ```python
-# Edit: include all key columns + fields to update in row_data
-client.edit_item(
+# Update: include all key columns + fields to update in row_data
+client.update_item(
     "My Table",
     "keycol1",                                           # any one key column goes first
     {"keycol1": "foo", "keycol2": "bar", "val": "new"}, # all key cols + updated fields
