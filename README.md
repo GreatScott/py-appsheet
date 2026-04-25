@@ -1,5 +1,5 @@
 # py-appsheet
-A no-frills Python library for interacting with the Google AppSheet API.
+A no-frills Python library for interacting with the Google AppSheet API. Depends only on [`requests`](https://requests.readthedocs.io) — no other third-party dependencies.
 
 ## Installation
 ```
@@ -36,6 +36,61 @@ client = AppSheetClient(
     timezone="Europe/Berlin",
 )
 ```
+
+## Export & Schema Workflow
+
+Py-appsheet includes methods to help backup and export your tables and their schemas. The recommended workflow for exporting data safely:
+
+**Step 1 — Infer the schema from live data:**
+```python
+# Single table
+schema = client.infer_schema("Orders")
+
+# Multiple tables at once — returns {table_name: schema}
+schemas = client.infer_all_schemas(["Orders", "Patients", "Results"])
+```
+This fetches all rows, infers column types, and returns a schema dict with `contains_pii=False` on every column.
+
+**Step 2 — Review and mark PII columns:**
+
+Save the schema to a JSON file, edit it, and flip `contains_pii` to `true` for any columns that contain personal data. Optionally correct any type mismatches.
+
+```json
+{
+  "Orders": {
+    "columns": [
+      {"name": "patient_name", "contains_pii": true,  "inferred_type": "string"},
+      {"name": "order_ref",    "contains_pii": false, "inferred_type": "string"}
+    ]
+  }
+}
+```
+
+**Step 3 — Export using the schema:**
+```python
+import json
+
+with open("schemas.json") as f:
+    schemas = json.load(f)
+
+# Full export (emits a UserWarning if PII columns are present and not redacted)
+data, log = client.export_all_tables(["Orders", "Patients"], schemas=schemas)
+
+# De-identified export — PII columns replaced with "[REDACTED]"
+data, log = client.export_all_tables(["Orders", "Patients"], schemas=schemas, redact_pii=True)
+```
+
+See `examples/export_workflow.py` for a complete runnable example.
+
+> **Note:** Columns that are entirely blank across all rows may be omitted from the AppSheet API
+> response and will be absent from the inferred schema. If your table has always-empty columns,
+> add them manually to the schema JSON.
+
+> **Note:** Redacted values are always replaced with the string `"[REDACTED]"` regardless of the
+> column's original type (number, boolean, etc.). AppSheet returns all values as strings, so this
+> is consistent with the data format throughout.
+
+---
 
 ## Methods
 
@@ -106,6 +161,59 @@ response = client.delete_item("My Table", {"keycol1": "foo", "keycol2": "bar"})
 ```
 
 `delete_row()` is available as a backwards-compatible alias for `delete_item()`.
+
+### export_table — Full table export
+
+```python
+# Export all rows
+rows = client.export_table("Orders")
+
+# With schema — ensures all schema columns present, even if blank in AppSheet
+rows = client.export_table("Orders", schema=orders_schema)
+
+# De-identified — PII columns replaced with "[REDACTED]"
+rows = client.export_table("Orders", schema=orders_schema, redact_pii=True)
+```
+
+### export_all_tables — Multi-table export
+
+```python
+data, log = client.export_all_tables(
+    ["Orders", "Patients"],
+    schemas=schemas,      # dict of {table_name: schema}
+    redact_pii=True,
+)
+
+# data -> {"Orders": [...rows...], "Patients": [...rows...]}
+# log  -> {"status": "complete", "exported": [...], "failed": [...], ...}
+```
+
+Failed tables are logged and skipped — the export continues for remaining tables.
+
+### infer_schema / infer_all_schemas — Data-driven schema inference
+
+```python
+# Single table
+schema = client.infer_schema("Orders")
+
+# Pass pre-fetched rows to avoid a redundant API call
+rows = client.export_table("Orders")
+schema = client.infer_schema("Orders", rows=rows)
+
+# Multiple tables — returns {table_name: schema} ready for export_all_tables()
+schemas = client.infer_all_schemas(["Orders", "Patients", "Results"])
+```
+
+### diff_schemas — Schema change detection
+
+```python
+from py_appsheet import diff_schemas
+
+diff = diff_schemas(old_schema, new_schema)
+# -> {"added": [...], "removed": [...], "type_changed": [...], "unchanged": [...]}
+```
+
+Works with schemas produced by `infer_schema()` or any user-provided schema dict containing a `columns` list with `name` and `inferred_type` (or `appsheet_type`) fields.
 
 ---
 

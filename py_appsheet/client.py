@@ -1,5 +1,7 @@
 #
 import requests
+from .export import ExportMixin
+from .schema import SchemaMixin
 
 '''
 Some notes:
@@ -11,7 +13,7 @@ Some notes:
 '''
 
 
-class AppSheetClient:
+class AppSheetClient(ExportMixin, SchemaMixin):
     def __init__(self, app_id, api_key, *, locale="en-US", timezone="UTC"):
         """
         Args:
