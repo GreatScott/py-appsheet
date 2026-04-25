@@ -236,7 +236,7 @@ key = build_composite_key("foo", "bar")  # -> "foo: bar"
 rows = client.find_items("My Table", key, target_column="_ComputedKey")
 ```
 
-For **edit** and **delete**, include all key columns directly in the row data — AppSheet
+For **update** and **delete**, include all key columns directly in the row data — AppSheet
 does not accept `_ComputedKey` in write payloads:
 
 ```python
