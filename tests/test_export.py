@@ -141,6 +141,20 @@ class TestExportAllTables(unittest.TestCase):
             )
         self.assertEqual(data["TestTable"][0]["name"], "[REDACTED]")
 
+    def test_export_all_tables_redact_pii_skips_tables_without_schema(self):
+        schemas = {"TableA": SCHEMA_WITH_PII}
+        with patch.object(self.client, 'find_items', return_value=MOCK_ROWS):
+            data, log = self.client.export_all_tables(
+                ["TableA", "TableB"],
+                schemas=schemas,
+                redact_pii=True,
+            )
+        self.assertIn("TableA", data)
+        self.assertIn("TableB", data)
+        self.assertEqual(data["TableA"][0]["name"], "[REDACTED]")
+        self.assertNotEqual(data["TableB"][0]["name"], "[REDACTED]")
+        self.assertEqual(log["status"], "complete")
+
     def test_export_all_tables_redact_pii_in_log(self):
         with patch.object(self.client, 'find_items', return_value=MOCK_ROWS):
             _, log = self.client.export_all_tables(["TestTable"], redact_pii=True)

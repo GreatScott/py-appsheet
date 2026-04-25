@@ -14,7 +14,7 @@ Usage:
 """
 import os
 import json
-from py_appsheet import AppSheetClient, diff_schemas
+from py_appsheet import AppSheetClient
 
 client = AppSheetClient(
     app_id=os.environ["APPSHEET_APP_ID"],

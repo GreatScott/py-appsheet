@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import warnings
 from datetime import datetime, timezone
 
@@ -88,8 +90,9 @@ class ExportMixin:
 
         for table_name in table_names:
             schema = schemas.get(table_name) if schemas is not None else None
+            table_redact_pii = redact_pii and schema is not None
             try:
-                rows = self.export_table(table_name, schema=schema, redact_pii=redact_pii)
+                rows = self.export_table(table_name, schema=schema, redact_pii=table_redact_pii)
                 data[table_name] = rows
                 exported.append({"table": table_name, "row_count": len(rows)})
             except Exception as e:
