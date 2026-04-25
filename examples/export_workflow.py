@@ -52,7 +52,7 @@ def export_with_schemas():
 
     print(f"Status:    {log['status']}")
     print(f"Timestamp: {log['timestamp']}")
-    print(f"Redacted:  {log['redact_pii']}\n")
+    print(f"Redacted:  {log['redact_pii_requested']}\n")
 
     for entry in log["exported"]:
         print(f"  {entry['table']}: {entry['row_count']} rows exported")

@@ -52,10 +52,14 @@ class ExportMixin:
                     stacklevel=2,
                 )
 
-            extra_columns = [
-                col for col in (set(rows[0].keys()) if rows else set())
-                if col not in set(column_names)
-            ]
+            schema_column_set = set(column_names)
+            extra_columns = []
+            seen_extra = set()
+            for row in rows:
+                for col in row:
+                    if col not in schema_column_set and col not in seen_extra:
+                        extra_columns.append(col)
+                        seen_extra.add(col)
             if extra_columns:
                 warnings.warn(
                     f"Export of '{table_name}' returned columns not present in schema: "
@@ -117,14 +121,15 @@ class ExportMixin:
                     UserWarning,
                     stacklevel=2,
                 )
-                unredacted_tables.append(table_name)
-            elif table_redact_pii:
-                redacted_tables.append(table_name)
 
             try:
                 rows = self.export_table(table_name, schema=schema, redact_pii=table_redact_pii)
                 data[table_name] = rows
                 exported.append({"table": table_name, "row_count": len(rows)})
+                if redact_pii and not table_redact_pii:
+                    unredacted_tables.append(table_name)
+                elif table_redact_pii:
+                    redacted_tables.append(table_name)
             except Exception as e:
                 failed.append({"table": table_name, "error": str(e)})
 
