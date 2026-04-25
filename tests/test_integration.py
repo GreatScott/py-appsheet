@@ -16,6 +16,7 @@ composite key tests will fail.
 """
 import pytest
 from py_appsheet.utils import build_composite_key, build_selector
+from py_appsheet.schema import diff_schemas
 
 EXAMPLE_TABLE = "example_table"
 DUAL_KEY_TABLE = "dual_key_table"
@@ -122,6 +123,131 @@ class TestExampleTable:
         client.delete_row(EXAMPLE_TABLE, "Title Example", TEST_TITLE)
         results = client.find_items(EXAMPLE_TABLE, TEST_TITLE, target_column="Title Example")
         assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# export tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+class TestExport:
+
+    def test_export_table_returns_list(self, client):
+        """export_table returns a non-empty list of dicts."""
+        rows = client.export_table(EXAMPLE_TABLE)
+        assert isinstance(rows, list)
+        assert len(rows) >= 1
+        assert isinstance(rows[0], dict)
+
+    def test_export_table_with_schema_normalizes_columns(self, client):
+        """export_table with a schema ensures all schema columns are present in every row."""
+        schema = {
+            "table_name": EXAMPLE_TABLE,
+            "source": "manual",
+            "columns": [
+                {"name": "Title Example", "contains_pii": False},
+                {"name": "Assignee",      "contains_pii": False},
+                {"name": "Status",        "contains_pii": False},
+                {"name": "Another Column","contains_pii": False},
+            ],
+        }
+        rows = client.export_table(EXAMPLE_TABLE, schema=schema)
+        for row in rows:
+            assert "Title Example" in row
+            assert "Assignee" in row
+            assert "Status" in row
+            assert "Another Column" in row
+
+    def test_export_table_redact_pii(self, client):
+        """export_table with redact_pii=True replaces PII column values with [REDACTED]."""
+        schema = {
+            "table_name": EXAMPLE_TABLE,
+            "source": "manual",
+            "columns": [
+                {"name": "Title Example", "contains_pii": True},
+                {"name": "Assignee",      "contains_pii": False},
+                {"name": "Status",        "contains_pii": False},
+                {"name": "Another Column","contains_pii": False},
+            ],
+        }
+        rows = client.export_table(EXAMPLE_TABLE, schema=schema, redact_pii=True)
+        for row in rows:
+            assert row["Title Example"] == "[REDACTED]"
+            assert row["Assignee"] != "[REDACTED]"
+
+    def test_export_all_tables_returns_data_and_log(self, client):
+        """export_all_tables returns data dict and a complete log."""
+        data, log = client.export_all_tables([EXAMPLE_TABLE])
+        assert EXAMPLE_TABLE in data
+        assert isinstance(data[EXAMPLE_TABLE], list)
+        assert log["status"] == "complete"
+        assert len(log["exported"]) == 1
+        assert len(log["failed"]) == 0
+
+    def test_export_all_tables_partial_on_bad_table(self, client):
+        """export_all_tables logs failures for non-existent tables and continues."""
+        data, log = client.export_all_tables([EXAMPLE_TABLE, "nonexistent_table_xyz"])
+        assert EXAMPLE_TABLE in data
+        assert log["status"] == "partial"
+        assert any(f["table"] == "nonexistent_table_xyz" for f in log["failed"])
+
+
+# ---------------------------------------------------------------------------
+# schema tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+class TestSchema:
+
+    def test_infer_schema_returns_expected_structure(self, client):
+        """infer_schema returns a valid schema dict with required top-level keys."""
+        schema = client.infer_schema(EXAMPLE_TABLE)
+        assert schema["table_name"] == EXAMPLE_TABLE
+        assert schema["source"] == "data_inference"
+        assert schema["appsheet_app_id"] is not None
+        assert isinstance(schema["row_count"], int)
+        assert isinstance(schema["columns"], list)
+        assert len(schema["columns"]) >= 1
+
+    def test_infer_schema_column_structure(self, client):
+        """Each column in the inferred schema has required fields."""
+        schema = client.infer_schema(EXAMPLE_TABLE)
+        for col in schema["columns"]:
+            assert "name" in col
+            assert "inferred_type" in col
+            assert "nullable" in col
+            assert "contains_pii" in col
+            assert col["contains_pii"] is False
+
+    def test_infer_schema_known_columns_present(self, client):
+        """infer_schema captures the known columns of example_table."""
+        schema = client.infer_schema(EXAMPLE_TABLE)
+        names = [col["name"] for col in schema["columns"]]
+        assert "Title Example" in names
+
+    def test_infer_schema_uses_pre_fetched_rows(self, client):
+        """infer_schema accepts pre-fetched rows and does not make an extra API call."""
+        rows = client.export_table(EXAMPLE_TABLE)
+        schema = client.infer_schema(EXAMPLE_TABLE, rows=rows)
+        assert schema["row_count"] == len(rows)
+
+    def test_diff_schemas_no_change(self, client):
+        """diff_schemas reports no changes when the same schema is compared to itself."""
+        schema = client.infer_schema(EXAMPLE_TABLE)
+        diff = diff_schemas(schema, schema)
+        assert diff["added"] == []
+        assert diff["removed"] == []
+        assert diff["type_changed"] == []
+        assert len(diff["unchanged"]) == len(schema["columns"])
+
+    def test_diff_schemas_detects_added_column(self, client):
+        """diff_schemas correctly identifies a newly added column."""
+        schema = client.infer_schema(EXAMPLE_TABLE)
+        new_schema = {**schema, "columns": schema["columns"] + [
+            {"name": "new_col", "inferred_type": "string", "contains_pii": False, "nullable": True}
+        ]}
+        diff = diff_schemas(schema, new_schema)
+        assert "new_col" in diff["added"]
 
 
 # ---------------------------------------------------------------------------
