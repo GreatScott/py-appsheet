@@ -16,9 +16,10 @@ class ExportMixin:
 
         Args:
             table_name (str): The name of the table to export.
-            schema (dict, optional): A schema dict (from infer_schema(), the scraper, or manual).
-                If provided, ensures every schema column is present in every row (filling None
-                for columns AppSheet omitted). Also enables PII-aware behavior.
+            schema (dict, optional): A schema dict, such as the output of infer_schema()
+                or any user-provided schema dict with a "columns" list.
+                If provided, ensures every schema column is present in every row (filling
+                None for columns AppSheet omitted). Also enables PII-aware behavior.
             redact_pii (bool): If True, replaces values in columns marked contains_pii=True
                 with "[REDACTED]". Requires schema. Defaults to False.
 
@@ -51,12 +52,27 @@ class ExportMixin:
                     stacklevel=2,
                 )
 
+            extra_columns = [
+                col for col in (set(rows[0].keys()) if rows else set())
+                if col not in set(column_names)
+            ]
+            if extra_columns:
+                warnings.warn(
+                    f"Export of '{table_name}' returned columns not present in schema: "
+                    f"{sorted(extra_columns)}. They will be included after schema columns. "
+                    "Update the schema to suppress this warning.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
             normalized = []
             for row in rows:
                 normalized_row = {col: row.get(col, None) for col in column_names}
                 if redact_pii:
                     for col in pii_columns:
                         normalized_row[col] = "[REDACTED]"
+                for col in extra_columns:
+                    normalized_row[col] = row.get(col)
                 normalized.append(normalized_row)
             rows = normalized
 
@@ -88,9 +104,23 @@ class ExportMixin:
         exported = []
         failed = []
 
+        redacted_tables = []
+        unredacted_tables = []
+
         for table_name in table_names:
             schema = schemas.get(table_name) if schemas is not None else None
             table_redact_pii = redact_pii and schema is not None
+            if redact_pii and not table_redact_pii:
+                warnings.warn(
+                    f"redact_pii=True was requested but '{table_name}' has no schema — "
+                    "it will be exported without redaction.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                unredacted_tables.append(table_name)
+            elif table_redact_pii:
+                redacted_tables.append(table_name)
+
             try:
                 rows = self.export_table(table_name, schema=schema, redact_pii=table_redact_pii)
                 data[table_name] = rows
@@ -101,7 +131,9 @@ class ExportMixin:
         log = {
             "status": "complete" if not failed else "partial",
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "redact_pii": redact_pii,
+            "redact_pii_requested": redact_pii,
+            "redacted_tables": redacted_tables,
+            "unredacted_tables": unredacted_tables,
             "exported": exported,
             "failed": failed,
         }

@@ -130,8 +130,9 @@ def diff_schemas(old_schema: dict, new_schema: dict) -> dict:
     """
     Compare two schema dicts and return a summary of changes.
 
-    Works with any schema source (data_inference, preview_scrape, manual).
-    Uses inferred_type if present, otherwise appsheet_type for type comparison.
+    Works with any schema dict that provides a ``columns`` list of column
+    definitions. Each column should include ``name`` and either
+    ``inferred_type`` or ``appsheet_type`` for type comparison.
 
     Args:
         old_schema (dict): The previous schema.

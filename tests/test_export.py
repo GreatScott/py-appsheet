@@ -69,6 +69,17 @@ class TestExportTable(unittest.TestCase):
             self.assertEqual(row["email"], "[REDACTED]")
             self.assertNotEqual(row["score"], "[REDACTED]")
 
+    def test_export_table_preserves_extra_columns_not_in_schema(self):
+        rows_with_extra = [{"name": "Alice", "email": "a@example.com", "score": "42", "new_col": "surprise"}]
+        with patch.object(self.client, 'find_items', return_value=rows_with_extra):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self.client.export_table("TestTable", schema=SCHEMA_NO_PII)
+        self.assertIn("new_col", result[0])
+        self.assertEqual(result[0]["new_col"], "surprise")
+        self.assertEqual(len(caught), 1)
+        self.assertIn("not present in schema", str(caught[0].message))
+
     def test_export_table_redact_pii_without_schema_raises(self):
         with self.assertRaises(ValueError):
             self.client.export_table("TestTable", redact_pii=True)
@@ -157,8 +168,21 @@ class TestExportAllTables(unittest.TestCase):
 
     def test_export_all_tables_redact_pii_in_log(self):
         with patch.object(self.client, 'find_items', return_value=MOCK_ROWS):
-            _, log = self.client.export_all_tables(["TestTable"], redact_pii=True)
-        self.assertTrue(log["redact_pii"])
+            _, log = self.client.export_all_tables(
+                ["TestTable"], schemas={"TestTable": SCHEMA_WITH_PII}, redact_pii=True
+            )
+        self.assertTrue(log["redact_pii_requested"])
+        self.assertIn("TestTable", log["redacted_tables"])
+        self.assertEqual(log["unredacted_tables"], [])
+
+    def test_export_all_tables_warns_and_logs_unredacted_tables(self):
+        with patch.object(self.client, 'find_items', return_value=MOCK_ROWS):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                _, log = self.client.export_all_tables(["TestTable"], redact_pii=True)
+        self.assertIn("TestTable", log["unredacted_tables"])
+        self.assertEqual(log["redacted_tables"], [])
+        self.assertTrue(any("without redaction" in str(w.message) for w in caught))
 
     def test_export_all_tables_log_has_timestamp(self):
         with patch.object(self.client, 'find_items', return_value=MOCK_ROWS):

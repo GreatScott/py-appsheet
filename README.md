@@ -1,5 +1,5 @@
 # py-appsheet
-A no-frills Python library for interacting with the Google AppSheet API.
+A no-frills Python library for interacting with the Google AppSheet API. Depends only on [`requests`](https://requests.readthedocs.io) — no other third-party dependencies.
 
 ## Installation
 ```
@@ -213,7 +213,7 @@ diff = diff_schemas(old_schema, new_schema)
 # -> {"added": [...], "removed": [...], "type_changed": [...], "unchanged": [...]}
 ```
 
-Works with schemas from any source (`data_inference`, `preview_scrape`, `manual`).
+Works with schemas produced by `infer_schema()` or any user-provided schema dict containing a `columns` list with `name` and `inferred_type` (or `appsheet_type`) fields.
 
 ---
 
